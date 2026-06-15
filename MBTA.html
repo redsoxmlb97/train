@@ -41,7 +41,7 @@
                     </tr>
                 </thead>
                 <tbody id="board-body" class="divide-y divide-zinc-900">
-                    <tr><td colspan="5" class="py-12 text-center text-zinc-500 text-sm mono animate-pulse">COMPILING SYSTEM MATRIX TILES...</td></tr>
+                    <tr><td colspan="5" class="py-12 text-center text-zinc-500 text-sm mono animate-pulse">CONNECTING SECURELY TO MBTA LIVE STREAM...</td></tr>
                 </tbody>
             </table>
         </main>
@@ -86,7 +86,7 @@
             try {
                 const now = new Date();
 
-                // CRITICAL FIX: Explicitly use HTTPS to satisfy GitHub Pages security layers
+                // Call the MBTA using secure HTTPS endpoint
                 const url = `https://api-v3.mbta.com/schedules?filter[route]=${ROUTES}&include=prediction,stop&sort=departure_time`;
                 const response = await fetch(url);
                 if (!response.ok) throw new Error(`API Connection Dropped: ${response.status}`);
@@ -127,6 +127,7 @@
                 for (const tripId in trips) {
                     const legs = trips[tripId];
 
+                    // Find if the trip stops at Readville
                     const readvilleLeg = legs.find(l => {
                         const rawStop = l.relationships?.stop?.data?.id || '';
                         return rawStop === DEST_STOP_ID || parentStopsMap[rawStop] === DEST_STOP_ID;
@@ -137,6 +138,7 @@
                     if (!schedArrTimeRaw) continue;
                     let finalArrival = new Date(schedArrTimeRaw);
 
+                    // Grab legs matching our targeted master origin stations
                     const validOriginsInTrip = legs.filter(l => {
                         const rawStop = l.relationships?.stop?.data?.id || '';
                         const parentStop = parentStopsMap[rawStop] || rawStop;
@@ -151,6 +153,7 @@
                         let statusText = 'SCHEDULED';
                         let statusStyle = 'text-zinc-500 border-zinc-800 bg-zinc-900/40';
 
+                        // Process live prediction tracking overlays safely
                         const predRefId = originLeg.relationships?.prediction?.data?.id;
                         if (predRefId && json.included) {
                             const liveData = json.included.find(i => i.type === 'prediction' && i.id === predRefId);
@@ -165,9 +168,9 @@
                             }
                         }
 
-                        const minFromNow = (finalDeparture - now) / 60000;
-                        if (minFromNow < -5 || minFromNow > 180) return; 
-                        if (finalDeparture >= finalArrival) return;
+                        // TIME CORRECTION: Filter out old trains using a clean mathematical millisecond difference
+                        const timeDiffMinutes = (finalDeparture.getTime() - now.getTime()) / 60000;
+                        if (timeDiffMinutes < -10 || timeDiffMinutes > 240) return; // Wide 4-hour window to catch timezone drifts
 
                         const rawStop = originLeg.relationships?.stop?.data?.id || '';
                         const finalParentId = parentStopsMap[rawStop] || rawStop;
@@ -198,7 +201,7 @@
                 renderBoard();
 
             } catch (e) {
-                console.error("Dashboard Engine Exception:", e);
+                console.error("Dashboard Engine Error Context:", e);
                 document.getElementById('board-body').innerHTML = `<tr><td colspan="5" class="py-8 text-center text-rose-400 text-xs mono">TELEMETRY SYNC ERROR - RETRYING</td></tr>`;
             }
         }
@@ -211,8 +214,9 @@
                 filteredRuns = cachedRuns.filter(r => r.origin === currentFilter);
             }
 
+            // CRITICAL UI FAILSAFE: If the data array is empty, explicitly print it so the loading animation goes away
             if (filteredRuns.length === 0) {
-                boardBody.innerHTML = `<tr><td colspan="5" class="py-8 text-center text-zinc-500 text-sm mono">NO UPCOMING DEPARTURES SLATED FOR ${currentFilter.toUpperCase()}</td></tr>`;
+                boardBody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-zinc-500 text-sm mono">NO SYSTEM TRAINS IN NEXT 4 HOURS (VERIFYING FEEDS)</td></tr>`;
                 return;
             }
 
